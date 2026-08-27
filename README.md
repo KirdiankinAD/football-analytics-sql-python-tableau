@@ -1,4 +1,4 @@
-# ⚽ Football Match Analytics — SQL Deep Dive (PostgreSQL)
+# ⚽ Football Match Analytics — (PostgreSQL)
 
 Исследование около **95 000 футбольных матчей** из 18 лиг и кубков (2000–2020‑е) средствами чистого SQL: от нормализации «грязного» CSV до проверки футбольных гипотез статистическими функциями PostgreSQL.
 
