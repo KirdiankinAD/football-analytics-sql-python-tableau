@@ -18,7 +18,7 @@ ORDER BY avg_goals DESC;
 
 Кубки заметно результативнее лиг: DFB‑Pokal — 3.61 гола за матч, FA Cup — 3.21, против 2.5–2.94 у топ‑5 лиг.
 
-![Средний счёт по лигам](images/01_avg_goals_by_league.png)
+![Средний счёт по лигам](sql/images/01_avg_goals_by_league.png)
 
 ### Win rate команд с фильтром по выборке
 
