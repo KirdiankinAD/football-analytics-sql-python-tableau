@@ -1,0 +1,7 @@
+echo "# football-analytics-sql-python-tableau" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/KirdiankinAD/football-analytics-sql-python-tableau.git
+git push -u origin main
