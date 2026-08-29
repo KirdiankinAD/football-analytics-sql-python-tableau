@@ -4,13 +4,8 @@
 --
 -- Основные SQL-запросы + дополнительные аналитические кейсы.
 -- Скриншоты результатов находятся в sql/images/.
---
--- ВАЖНО:
--- GitHub отображает .sql как код, поэтому Markdown-картинки
--- здесь не используются. Для каждого доступного результата
--- указан прямой URL на файл изображения.
+-- Для каждого доступного результата указан прямой URL на файл изображения.
 -- ============================================================
-
 
 -- ============================================================
 -- 1. Где забивают больше — лиги или кубки?
@@ -28,28 +23,8 @@ ORDER BY avg_score DESC;
 -- Скриншот:
 -- https://github.com/KirdiankinAD/football-analytics-sql-python-tableau/blob/main/sql/images/01_avg_goals_by_league.png
 
-
 -- ============================================================
--- 2. Результативные домашние команды
--- Более 100 домашних матчей и более 2 голов в среднем.
--- ============================================================
-
-SELECT
-    team_name
-FROM teams t
-JOIN match_team_stats ms ON ms.team_id = t.id
-JOIN matches m ON ms.match_id = m.id
-WHERE ms.is_home = TRUE
-GROUP BY team_name
-HAVING COUNT(m.home_team_id) > 100
-   AND AVG(m.home_score) > 2;
-
--- Скриншот:
--- Результат для запроса 2 не был предоставлен.
-
-
--- ============================================================
--- 3. Топ-10 стадионов по средней посещаемости
+-- 2. Топ-10 стадионов по средней посещаемости
 -- ============================================================
 
 SELECT
@@ -68,7 +43,7 @@ LIMIT 10;
 
 
 -- ============================================================
--- 4. Win rate команд с учётом дома/гостях
+-- 3. Win rate команд с учётом дома/гостях
 -- ============================================================
 
 WITH team_result AS (
@@ -119,88 +94,7 @@ ORDER BY win_rate DESC;
 
 
 -- ============================================================
--- 5. Ранг команд по количеству голов внутри лиги
--- DENSE_RANK используется для ранга без пропусков.
--- ============================================================
-
-WITH total_score AS (
-    SELECT
-        l.league_name,
-        t.team_name,
-        SUM(
-            CASE
-                WHEN ms.is_home = TRUE THEN m.home_score
-                ELSE m.away_score
-            END
-        ) AS team_score
-    FROM matches m
-    JOIN match_team_stats ms ON ms.match_id = m.id
-    JOIN teams t ON t.id = ms.team_id
-    JOIN leagues l ON l.id = m.league_id
-    GROUP BY l.league_name, t.team_name
-)
-SELECT
-    ts.team_name,
-    ts.league_name,
-    ts.team_score,
-    DENSE_RANK() OVER (
-        PARTITION BY ts.league_name
-        ORDER BY ts.team_score DESC
-    ) AS team_rank
-FROM total_score ts;
-
--- Скриншот:
--- Результат для запроса 5 не был предоставлен.
-
-
--- ============================================================
--- 6. Хронология матчей выбранной команды + скользящее среднее
--- ============================================================
-
-WITH match_date AS (
-    SELECT
-        t.team_name,
-        CASE
-            WHEN ms.is_home = TRUE THEN m.home_score
-            ELSE m.away_score
-        END AS team_goals,
-        CASE
-            WHEN m.date_month >= 8
-            THEN SPLIT_PART(m.season_year, '/', 1)::integer
-            ELSE SPLIT_PART(m.season_year, '/', 2)::integer
-        END AS match_year,
-        m.date_month,
-        m.date_day,
-        t2.team_name AS opponent
-    FROM matches m
-    JOIN match_team_stats ms ON ms.match_id = m.id
-    JOIN teams t ON t.id = ms.team_id
-    JOIN teams t2
-        ON t2.id = CASE
-            WHEN ms.is_home = TRUE THEN m.away_team_id
-            ELSE m.home_team_id
-        END
-)
-SELECT
-    md.team_name,
-    md.opponent,
-    MAKE_DATE(md.match_year, md.date_month, md.date_day) AS match_date,
-    ROUND(
-        AVG(md.team_goals) OVER (
-            ORDER BY md.match_year, md.date_month, md.date_day
-            ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
-        ),
-        2
-    ) AS avg_score
-FROM match_date md
-WHERE md.team_name = 'Real Madrid';
-
--- Скриншот:
--- Результат для запроса 6 не был предоставлен.
-
-
--- ============================================================
--- 7. Кто эффективнее своего xG?
+-- 4. Кто эффективнее своего xG?
 -- ============================================================
 
 WITH xg AS (
@@ -248,51 +142,7 @@ WHERE r.team_rank_over <= 5
 
 
 -- ============================================================
--- 8. Изменение владения мячом относительно предыдущего матча
--- ============================================================
-
-WITH own AS (
-    SELECT
-        t.team_name,
-        ms.ball_possession,
-        MAKE_DATE(
-            CASE
-                WHEN m.date_month > 8
-                THEN SPLIT_PART(m.season_year, '/', 1)::integer
-                ELSE SPLIT_PART(m.season_year, '/', 2)::integer
-            END,
-            m.date_month,
-            m.date_day
-        ) AS match_date
-    FROM match_team_stats ms
-    JOIN teams t ON t.id = ms.team_id
-    JOIN matches m ON m.id = ms.match_id
-),
-possessions AS (
-    SELECT
-        o.team_name,
-        o.ball_possession,
-        o.match_date,
-        LAG(o.ball_possession, 1, NULL) OVER (
-            ORDER BY match_date NULLS LAST
-        ) AS lag_possessions
-    FROM own o
-    WHERE o.team_name = 'Real Madrid'
-)
-SELECT
-    p.team_name,
-    p.match_date,
-    p.ball_possession,
-    p.lag_possessions
-FROM possessions p
-WHERE EXTRACT(YEAR FROM p.match_date) >= 2014;
-
--- Скриншот:
--- Результат для запроса 8 не был предоставлен.
-
-
--- ============================================================
--- 9. Топ-5 сезонов по красным карточкам с pivot
+-- 5. Топ-5 сезонов по красным карточкам с pivot
 -- ============================================================
 
 WITH red_card_stats AS (
@@ -346,7 +196,7 @@ LIMIT 5;
 
 
 -- ============================================================
--- 10. Текущая форма команд — последние 5 матчей
+-- 6. Текущая форма команд — последние 5 матчей
 -- ============================================================
 
 WITH winrate AS (
@@ -411,14 +261,8 @@ LIMIT 10;
 -- Скриншот:
 -- https://github.com/KirdiankinAD/football-analytics-sql-python-tableau/blob/main/sql/images/10_current_form.png
 
-
 -- ============================================================
--- ДОПОЛНИТЕЛЬНЫЕ АНАЛИТИЧЕСКИЕ КЕЙСЫ
--- ============================================================
-
-
--- ============================================================
--- 11. Г1. Реальность домашнего преимущества
+-- 7. Г1. Реальность домашнего преимущества
 -- ============================================================
 
 WITH home_winrate AS (
@@ -447,8 +291,7 @@ ORDER BY winrate DESC;
 
 
 -- ============================================================
--- 12. Г2. Посещаемость и домашняя победа
--- CORR + REGR_SLOPE + REGR_R2
+-- 8. Г2. Посещаемость и домашняя победа CORR + REGR_SLOPE + REGR_R2
 -- ============================================================
 
 SELECT
@@ -472,7 +315,7 @@ WHERE m.attendance IS NOT NULL;
 
 
 -- ============================================================
--- 13. Г3. Самые частые пары соперников
+-- 9. Г3. Самые частые пары соперников
 -- ============================================================
 
 WITH pair_matches AS (
@@ -500,180 +343,7 @@ LIMIT 10;
 
 
 -- ============================================================
--- 14. Г4. Изменение баланса личных встреч во времени
--- ============================================================
-
-WITH pair_matches AS (
-    SELECT
-        LEAST(m.home_team_id, m.away_team_id) AS team_1_id,
-        GREATEST(m.home_team_id, m.away_team_id) AS team_2_id,
-        m.home_score,
-        m.away_score,
-        m.home_team_id,
-        m.away_team_id,
-        MAKE_DATE(
-            SPLIT_PART(
-                m.season_year,
-                '/',
-                CASE WHEN m.date_month >= 8 THEN 1 ELSE 2 END
-            )::integer,
-            m.date_month,
-            m.date_day
-        ) AS match_date
-    FROM matches m
-),
-versus_wins AS (
-    SELECT
-        pm.team_1_id,
-        pm.team_2_id,
-        CASE
-            WHEN (
-                pm.home_team_id = pm.team_1_id
-                AND pm.home_score > pm.away_score
-            )
-            OR (
-                pm.home_team_id = pm.team_2_id
-                AND pm.home_score < pm.away_score
-            )
-            THEN 1 ELSE 0
-        END AS wins_1,
-        CASE
-            WHEN (
-                pm.home_team_id = pm.team_1_id
-                AND pm.home_score < pm.away_score
-            )
-            OR (
-                pm.home_team_id = pm.team_2_id
-                AND pm.home_score > pm.away_score
-            )
-            THEN 1 ELSE 0
-        END AS wins_2,
-        ROW_NUMBER() OVER (
-            PARTITION BY team_1_id, team_2_id
-            ORDER BY pm.match_date
-        ) AS num
-    FROM pair_matches pm
-),
-balance AS (
-    SELECT
-        vw.team_1_id,
-        vw.team_2_id,
-        vw.num,
-        SUM(vw.wins_1) OVER (
-            PARTITION BY vw.team_1_id, vw.team_2_id
-            ORDER BY vw.num
-        ) AS win_1,
-        SUM(vw.wins_2) OVER (
-            PARTITION BY vw.team_1_id, vw.team_2_id
-            ORDER BY vw.num
-        ) AS win_2,
-        COUNT(*) OVER (
-            PARTITION BY vw.team_1_id, vw.team_2_id
-        ) AS total_matches
-    FROM versus_wins vw
-)
-SELECT
-    t1.team_name AS team_1,
-    t2.team_name AS team_2,
-    b.win_1,
-    b.win_2,
-    b.num
-FROM balance b
-JOIN teams t1 ON t1.id = b.team_1_id
-JOIN teams t2 ON t2.id = b.team_2_id
-WHERE b.total_matches > 10
-  AND (
-      b.num = b.total_matches
-      OR b.num = b.total_matches / 2
-  )
-ORDER BY b.team_1_id, b.team_2_id, b.num;
-
--- Скриншот:
--- Результат для запроса 14 не был предоставлен.
-
-
--- ============================================================
--- 15. Г5. Камбэки после проигрыша в первом тайме
--- ============================================================
-
-WITH half AS (
-    SELECT
-        l.league_name,
-        t.team_name,
-        CASE
-            WHEN ms.is_home = TRUE
-            THEN SPLIT_PART(m.first_half, '-', 1)::integer
-            ELSE SPLIT_PART(m.first_half, '-', 2)::integer
-        END AS own_first_half,
-        CASE
-            WHEN ms.is_home = TRUE
-            THEN SPLIT_PART(m.first_half, '-', 2)::integer
-            ELSE SPLIT_PART(m.first_half, '-', 1)::integer
-        END AS opp_first_half,
-        CASE
-            WHEN ms.is_home = TRUE
-            THEN SPLIT_PART(m.second_half, '-', 1)::integer
-            ELSE SPLIT_PART(m.second_half, '-', 2)::integer
-        END AS own_second_half,
-        CASE
-            WHEN ms.is_home = TRUE
-            THEN SPLIT_PART(m.second_half, '-', 2)::integer
-            ELSE SPLIT_PART(m.second_half, '-', 1)::integer
-        END AS opp_second_half
-    FROM match_team_stats ms
-    JOIN teams t ON t.id = ms.team_id
-    JOIN matches m ON m.id = ms.match_id
-    JOIN leagues l ON l.id = m.league_id
-    WHERE m.first_half IS NOT NULL
-      AND m.second_half IS NOT NULL
-      AND m.first_half ~ '^\d+-\d+$'
-      AND m.second_half ~ '^\d+-\d+$'
-),
-comebacks AS (
-    SELECT
-        h.league_name,
-        h.team_name,
-        COUNT(*) AS total_matches,
-        COUNT(
-            CASE
-                WHEN (
-                    h.own_first_half < h.opp_first_half
-                    AND (
-                        h.own_first_half + h.own_second_half
-                    ) > (
-                        h.opp_first_half + h.opp_second_half
-                    )
-                )
-                THEN 1
-                ELSE NULL
-            END
-        ) AS comeback
-    FROM half h
-    GROUP BY h.league_name, h.team_name
-),
-finals AS (
-    SELECT
-        c.league_name,
-        c.team_name,
-        c.total_matches,
-        ROUND(c.comeback::numeric / c.total_matches, 2) AS per
-    FROM comebacks c
-)
-SELECT
-    f.league_name,
-    f.team_name,
-    f.per
-FROM finals f
-WHERE f.total_matches > 50
-ORDER BY f.per DESC;
-
--- Скриншот:
--- Результат для запроса 15 не был предоставлен.
-
-
--- ============================================================
--- 16. Г6. Динамика результативности лиг по сезонам
--- LAG()
+-- 10. Г4. Динамика результативности лиг по сезонам LAG()
 -- ============================================================
 
 WITH goals AS (
@@ -733,7 +403,7 @@ ORDER BY n.league_name, n.season_year;
 
 
 -- ============================================================
--- 17. Г7. Влияние красных карточек на win rate
+-- 11. Г5. Влияние красных карточек на win rate
 -- ============================================================
 
 WITH rc_stats AS (
@@ -827,77 +497,6 @@ ORDER BY drop_wr DESC;
 
 -- Скриншот:
 -- https://github.com/KirdiankinAD/football-analytics-sql-python-tableau/blob/main/sql/images/17_red_cards_vs_winrate.png
-
-
--- ============================================================
--- 18. Г8. Конверсия ударов в створ в голы по лигам
--- ============================================================
-
-WITH sum_goals_and_shots AS (
-    SELECT
-        l.league_name,
-        SUM(
-            CASE
-                WHEN ms.is_home = TRUE THEN m.home_score
-                ELSE m.away_score
-            END
-        ) AS total_goals,
-        SUM(ms.shots_on_goal) AS total_shots_on_goals
-    FROM match_team_stats ms
-    JOIN matches m ON m.id = ms.match_id
-    JOIN leagues l ON l.id = m.league_id
-    WHERE ms.shots_on_goal IS NOT NULL
-      AND ms.shots_on_goal > 0
-    GROUP BY l.league_name
-)
-SELECT
-    s.league_name,
-    ROUND(
-        (total_goals::numeric / total_shots_on_goals),
-        2
-    ) AS shot_conversion
-FROM sum_goals_and_shots s
-ORDER BY shot_conversion DESC;
-
--- Скриншот:
--- Результат для запроса 18 не был предоставлен.
-
-
--- ============================================================
--- 19. Г9. Предсказуемость результативности Premier League
--- ============================================================
-
-WITH total_goals AS (
-    SELECT
-        l.league_name,
-        m.season_year,
-        m.id AS match_number,
-        m.home_score + m.away_score AS total_score
-    FROM matches m
-    JOIN leagues l ON l.id = m.league_id
-    WHERE l.league_name = 'Premier-league'
-)
-SELECT
-    tg.league_name,
-    tg.season_year,
-    COUNT(DISTINCT tg.match_number) AS total_matches,
-    ROUND(AVG(total_score), 2) AS avg_score,
-    PERCENTILE_CONT(0.5)
-        WITHIN GROUP (ORDER BY tg.total_score) AS median_score,
-    ROUND(
-        AVG(total_score)
-        - PERCENTILE_CONT(0.5)
-            WITHIN GROUP (ORDER BY tg.total_score)::numeric,
-        2
-    ) AS skewness,
-    ROUND(STDDEV_SAMP(tg.total_score), 2) AS stddev_goals
-FROM total_goals tg
-GROUP BY tg.league_name, tg.season_year
-ORDER BY tg.season_year DESC
-LIMIT 5;
-
--- Скриншот:
--- Результат для запроса 19 не был предоставлен.
 
 
 -- ============================================================
